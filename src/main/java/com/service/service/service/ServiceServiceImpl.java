@@ -13,6 +13,9 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -35,6 +38,9 @@ public class ServiceServiceImpl implements ServiceService {
     private final ServiceRepository serviceRepository;
     private final Validator validator;
     private final WebClient.Builder webClientBuilder;
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
 
     //webClient requires HttpClient library to work propertly
@@ -242,44 +248,54 @@ public class ServiceServiceImpl implements ServiceService {
     }
 
     @Override
+    @Cacheable(value = "activityNameCache", key = "#id")
     public String getActivityName(long id) {
-        try{
-            WebClient build = webClientBuilder.clientConnector(new ReactorClientHttpConnector(client))
-                    .baseUrl("http://localhost:8084/api/activities/")
-                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                    .defaultUriVariables(Collections.singletonMap("url", "http://localhost:8084/api/activities/"))
-                    .build();
-            JsonNode block = build.method(HttpMethod.GET).uri("/" + id)
-                    .retrieve().bodyToMono(JsonNode.class).block();
-            String name = block.get("name").asText();
-            return name;
-        }catch (WebClientResponseException e) {
-            // La aplicación activities no está en funcionamiento o la URL no responde
-            return null; // Devuelve un valor predeterminado o nulo
-        } catch (Exception ex) {
-            // Otra excepción, manejar según sea necesario
-            return null; // Devuelve un valor predeterminado o nulo
+        String cachedActivityName=(String)redisTemplate.opsForValue().get("activityName:"+id);
+        if(cachedActivityName!=null){
+            return cachedActivityName;
+        }else{
+            try{
+                WebClient build = webClientBuilder.clientConnector(new ReactorClientHttpConnector(client))
+                        .baseUrl("https://activity-services.onrender.com/api/activities/")
+                        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .defaultUriVariables(Collections.singletonMap("url", "https://activity-services.onrender.com/api/activities/"))
+                        .build();
+                JsonNode block = build.method(HttpMethod.GET).uri("/" + id)
+                        .retrieve().bodyToMono(JsonNode.class).block();
+                String name = block.get("name").asText();
+                redisTemplate.opsForValue().set("activityName:"+id,name);
+                return name;
+            }catch (WebClientResponseException e) {
+                return null;
+            } catch (Exception ex) {
+                return null;
+            }
         }
     }
 
     @Override
+    @Cacheable(value = "activityDescriptionCache", key = "#id")
     public String getActivityDescription(long id) {
-        try{
-            WebClient build = webClientBuilder.clientConnector(new ReactorClientHttpConnector(client))
-                    .baseUrl("http://localhost:8084/api/activities/")
-                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                    .defaultUriVariables(Collections.singletonMap("url", "http://localhost:8084/api/activities/"))
-                    .build();
-            JsonNode block = build.method(HttpMethod.GET).uri("/" + id)
-                    .retrieve().bodyToMono(JsonNode.class).block();
-            String description = block.get("description").asText();
-            return description;
-        }catch (WebClientResponseException e) {
-            // La aplicación activities no está en funcionamiento o la URL no responde
-            return null; // Devuelve un valor predeterminado o nulo
-        } catch (Exception ex) {
-            // Otra excepción, manejar según sea necesario
-            return null; // Devuelve un valor predeterminado o nulo
+        String cachedActivityDescription=(String) redisTemplate.opsForValue().get("activityDescription"+id);
+        if(cachedActivityDescription!=null){
+            return cachedActivityDescription;
+        }else{
+            try{
+                WebClient build = webClientBuilder.clientConnector(new ReactorClientHttpConnector(client))
+                        .baseUrl("https://activity-services.onrender.com/api/activities/")
+                        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .defaultUriVariables(Collections.singletonMap("url", "https://activity-services.onrender.com/api/activities/"))
+                        .build();
+                JsonNode block = build.method(HttpMethod.GET).uri("/" + id)
+                        .retrieve().bodyToMono(JsonNode.class).block();
+                String description = block.get("description").asText();
+                redisTemplate.opsForValue().set("activityDescription"+id,description);
+                return description;
+            }catch (WebClientResponseException e) {
+                return null;
+            } catch (Exception ex) {
+                return null;
+            }
         }
     }
 }
